@@ -1,5 +1,7 @@
 use clap::Parser;
+use clickhouse::insert::Insert;
 use clickhouse::inserter::Inserter;
+use clickhouse::AsyncInsertOptions;
 use clickhouse::Client;
 use clickhouse::Row;
 use ethers::types::transaction::eip2930::AccessList;
@@ -357,10 +359,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
         schema::create_schema(&client).await?;
     }
 
-    let mut insert_block = client.inserter("blocks")?;
-    let mut insert_tx = client.inserter("transactions")?;
-    let mut insert_event = client.inserter("events")?;
-    let mut insert_withdraw = client.inserter("withdraw")?;
+    let mut insert_block: Insert<BlockRow> = client.async_insert::<BlockRow>(
+        "blocks",
+        AsyncInsertOptions::builder()
+            .async_insert(true)
+            .async_insert_deduplicate(true)
+            .async_insert_threads(num_cpus::get())
+            .build(),
+    )?;
+    let mut insert_tx: Insert<TransactionRow> = client.async_insert(
+        "transactions",
+        AsyncInsertOptions::builder()
+            .async_insert(true)
+            .async_insert_deduplicate(true)
+            .async_insert_threads(num_cpus::get())
+            .build(),
+    )?;
+    let mut insert_event: Insert<EventRow> = client.async_insert(
+        "events",
+        AsyncInsertOptions::builder()
+            .async_insert(true)
+            .async_insert_deduplicate(true)
+            .async_insert_threads(num_cpus::get())
+            .build(),
+    )?;
+    let mut insert_withdraw: Insert<WithdrawalRow> = client.async_insert(
+        "withdraw",
+        AsyncInsertOptions::builder()
+            .async_insert(true)
+            .async_insert_deduplicate(true)
+            .async_insert_threads(num_cpus::get())
+            .build(),
+    )?;
 
     for i in args.from..=args.to {
         parse_block(
@@ -372,10 +402,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             i,
         )
         .await?;
-        if i % 1000 == 0 {
-            insert_event.commit().await?;
-            insert_tx.commit().await?;
-            insert_block.commit().await?;
+        if i % 100_000 == 0 {
+            // insert_event.commit().await?;
+            // insert_tx.commit().await?;
+            // insert_block.commit().await?;
             warn!("{} done", i);
         }
     }
@@ -390,10 +420,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn parse_block(
     provider: &Provider<Ws>,
-    insert_block: &mut Inserter<BlockRow>,
-    insert_tx: &mut Inserter<TransactionRow>,
-    insert_event: &mut Inserter<EventRow>,
-    insert_withdraw: &mut Inserter<WithdrawalRow>,
+    insert_block: &mut Insert<BlockRow>,
+    insert_tx: &mut Insert<TransactionRow>,
+    insert_event: &mut Insert<EventRow>,
+    insert_withdraw: &mut Insert<WithdrawalRow>,
     block_number: u64,
 ) -> Result<(), Box<dyn Error>> {
     let block = provider

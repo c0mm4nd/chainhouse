@@ -7,10 +7,11 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-clickhouse = "0.11.4"
+clickhouse = { git="https://github.com/magurotuna/clickhouse.rs", branch="async_insert" }
 ethers = { version = "2.0.7", features = ["ws"] }
 tokio = { version = "1.28.2", features = ["full"] }
 serde_json = "1.0.96"
 clap = { version = "4.3.2", features = ["derive"] }
 pretty_env_logger = "0.5.0"
 log = "0.4.18"
+num_cpus = "1.15.0"
