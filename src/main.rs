@@ -1,7 +1,7 @@
 use clap::Parser;
+use clickhouse::inserter::Inserter;
 use clickhouse::Client;
 use clickhouse::Row;
-use clickhouse::inserter::Inserter;
 use ethers::types::transaction::eip2930::AccessList;
 use ethers::types::Bloom;
 use ethers::types::Bytes;
@@ -16,20 +16,21 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 
 extern crate pretty_env_logger;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 mod schema;
 
-/// Simple DDL program to load ethereum data into clickhouse 
+/// Simple DDL program to load ethereum data into clickhouse
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// clickhouse endpoint url
-    #[arg(short, long, default_value="http://localhost:8123")]
+    #[arg(short, long, default_value = "http://localhost:8123")]
     clickhouse: String,
 
     /// ethereum endpoint url
-    #[arg(short, long, default_value="ws://localhost:8545")]
+    #[arg(short, long, default_value = "ws://localhost:8545")]
     ethereum: String,
 
     /// from
@@ -41,7 +42,7 @@ struct Args {
     to: u64,
 
     /// initialize schema
-    #[arg(long, default_value_t=false)]
+    #[arg(long, default_value_t = false)]
     schema: bool,
 }
 
@@ -194,9 +195,7 @@ mod h256 {
 }
 
 mod access_list {
-    use ethers::{
-        types::transaction::eip2930::{AccessList, AccessListItem},
-    };
+    use ethers::types::transaction::eip2930::{AccessList, AccessListItem};
     use serde::{
         de::{Deserialize, Deserializer},
         ser::{Serialize, Serializer},
@@ -326,6 +325,22 @@ struct EventRow {
     address: H160,
 }
 
+#[derive(Row, Serialize, Deserialize)]
+pub struct WithdrawalRow {
+    blockHash: H256,
+    #[serde(with = "u64")]
+    blockNumber: U64,
+    #[serde(with = "u256")]
+    blockTimestamp: U256,
+    #[serde(with = "u64")]
+    index: U64,
+    #[serde(with = "u64")]
+    validatorIndex: U64,
+    address: H160,
+    #[serde(with = "u256")]
+    amount: U256,
+}
+
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init_timed();
@@ -337,7 +352,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_database("ethereum");
 
     let provider = Provider::<Ws>::connect(args.ethereum).await?;
-    
+
     if args.schema {
         schema::create_schema(&client).await?;
     }
@@ -345,16 +360,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut insert_block = client.inserter("blocks")?;
     let mut insert_tx = client.inserter("transactions")?;
     let mut insert_event = client.inserter("events")?;
+    let mut insert_withdraw = client.inserter("withdraw")?;
 
     for i in args.from..=args.to {
-        parse_block(&provider, &mut insert_block, &mut insert_tx,&mut  insert_event, i).await?;
-        if i % 1000 == 0{
+        parse_block(
+            &provider,
+            &mut insert_block,
+            &mut insert_tx,
+            &mut insert_event,
+            &mut insert_withdraw,
+            i,
+        )
+        .await?;
+        if i % 1000 == 0 {
             insert_event.commit().await?;
             insert_tx.commit().await?;
             insert_block.commit().await?;
             warn!("{} done", i);
         }
     }
+
+    insert_event.end().await?;
+    insert_tx.end().await?;
+    insert_block.end().await?;
+    insert_withdraw.end().await?;
 
     Ok(())
 }
@@ -364,6 +393,7 @@ async fn parse_block(
     insert_block: &mut Inserter<BlockRow>,
     insert_tx: &mut Inserter<TransactionRow>,
     insert_event: &mut Inserter<EventRow>,
+    insert_withdraw: &mut Inserter<WithdrawalRow>,
     block_number: u64,
 ) -> Result<(), Box<dyn Error>> {
     let block = provider
@@ -371,7 +401,6 @@ async fn parse_block(
         .await
         .unwrap()
         .unwrap();
-
 
     insert_block
         .write(&BlockRow {
@@ -402,16 +431,7 @@ async fn parse_block(
 
     for (i, tx) in block.transactions.iter().enumerate() {
         let receipt = &receipts[i];
-        // let access_list = if let Some(access_list_items) = &tx.access_list {
-        //     let mut access_list = Vec::with_capacity(access_list_items.0.len());
-        //     for item in &access_list_items.0 {
-        //         access_list.push((item.address, item.storage_keys.clone()));
-        //     }
-        //     Some(access_list)
 
-        // }else {
-        //     None
-        // };
         insert_tx
             .write(&TransactionRow {
                 hash: tx.hash,
@@ -460,19 +480,22 @@ async fn parse_block(
                 .await?;
         }
     }
-    // insert_event.end().await?;
-    // insert_tx.end().await?;
-    // insert_block.end().await?;
+
+    if let Some(withdraws) = block.withdrawals {
+        for w in withdraws {
+            insert_withdraw
+                .write(&WithdrawalRow {
+                    blockHash: block.hash.unwrap(),
+                    blockNumber: block.number.unwrap(),
+                    blockTimestamp: block.timestamp,
+                    index: w.index,
+                    validatorIndex: w.validator_index,
+                    address: w.address,
+                    amount: w.amount,
+                })
+                .await?;
+        }
+    }
 
     Ok(())
 }
-
-async fn inert_block(block: Block<Transaction>) {}
-
-// async fn insert_transaction() {
-
-// }
-
-// async fn insert_event() {
-
-// }

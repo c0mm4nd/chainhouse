@@ -31,7 +31,7 @@ pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
         extraData        String,
         timestamp        UInt256,
         size             UInt256,
-    ) ENGINE=ReplacingMergeTree 
+    ) ENGINE=MergeTree 
     ORDER BY (hash, number);
     ";
 
@@ -65,7 +65,7 @@ pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
         logsBloom         String,
         root              Nullable(String),
         status            UInt64
-    ) ENGINE=ReplacingMergeTree
+    ) ENGINE=MergeTree
     ORDER BY hash;
     ";
 
@@ -81,7 +81,20 @@ pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
         removed Boolean,
         topics Array(String),
         data String,
-    ) ENGINE=ReplacingMergeTree
+    ) ENGINE=MergeTree
+    ORDER BY (transactionHash, logIndex);
+    ";
+
+    let withdraw_ddl = r"
+    CREATE TABLE IF NOT EXISTS ethereum.withdraws (
+        blockHash String,
+        blockNumber UInt64,
+        blockTimestamp UInt256,
+        index UInt64,
+        validatorIndex UInt64,
+        address String,
+        amount UInt256
+    ) ENGINE=MergeTree
     ORDER BY (transactionHash, logIndex);
     ";
 
@@ -89,6 +102,7 @@ pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
     client.query(blocks_ddl).execute().await?;
     client.query(tx_ddl).execute().await?;
     client.query(event_ddl).execute().await?;
+    client.query(withdraw_ddl).execute().await?;
 
     debug!("schema initialized");
     Ok(())
