@@ -90,12 +90,12 @@ pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
         blockHash String,
         blockNumber UInt64,
         blockTimestamp UInt256,
-        index UInt64,
+        `index` UInt64,
         validatorIndex UInt64,
         address String,
         amount UInt256
     ) ENGINE=MergeTree
-    ORDER BY (transactionHash, logIndex);
+    ORDER BY (blockHash, index);
     ";
 
     client.query(db_ddl).execute().await?;
