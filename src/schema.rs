@@ -10,35 +10,35 @@ pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
 
     let blocks_ddl = r"
     CREATE TABLE IF NOT EXISTS ethereum.blocks (
-        hash             String,
+        hash             FixedString(32),
         number           UInt64,
-        parentHash       String,
+        parentHash       FixedString(32),
         uncles           Array(String),
-        sha3Uncles       String,           
+        sha3Uncles       FixedString(32),           
         totalDifficulty  UInt256,
-        miner            String,
+        miner            FixedString(32),
         difficulty       UInt256,
         nonce            UInt64,
-        mixHash          String,
+        mixHash          FixedString(32),
         baseFeePerGas    Nullable(UInt256),
         gasLimit         UInt256,
         gasUsed          UInt256,
-        stateRoot        String,
-        transactionsRoot String,
-        receiptsRoot     String,
+        stateRoot        FixedString(32),
+        transactionsRoot FixedString(32),
+        receiptsRoot     FixedString(32),
         logsBloom        String,
         withdrawlsRoot  Nullable(String),
         extraData        String,
         timestamp        UInt256,
         size             UInt256,
-    ) ENGINE=MergeTree 
+    ) ENGINE=ReplacingMergeTree 
     ORDER BY (hash, number);
     ";
 
     let tx_ddl = r"
     CREATE TABLE IF NOT EXISTS ethereum.transactions (
-        hash             String,
-        blockHash        String,
+        hash             FixedString(32),
+        blockHash        FixedString(32),
         blockNumber      UInt64,
         blockTimestamp   UInt256,
         transactionIndex UInt64,
@@ -63,25 +63,25 @@ pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
         effectiveGasPrice UInt256,
         gasUsed           UInt256,
         logsBloom         String,
-        root              Nullable(String),
+        root              Nullable(FixedString(32)),
         status            UInt64
-    ) ENGINE=MergeTree
+    ) ENGINE=ReplacingMergeTree
     ORDER BY hash;
     ";
 
     let event_ddl = r"
     CREATE TABLE IF NOT EXISTS ethereum.events (
-        address String,
-        blockHash String,
+        address FixedString(20),
+        blockHash FixedString(32),
         blockNumber UInt64,
         blockTimestamp UInt256,
-        transactionHash String,
+        transactionHash FixedString(32),
         transactionIndex UInt64,
         logIndex UInt256,
         removed Boolean,
-        topics Array(String),
+        topics Array(FixedString(32)),
         data String,
-    ) ENGINE=MergeTree
+    ) ENGINE=ReplacingMergeTree
     ORDER BY (transactionHash, logIndex);
     ";
 
@@ -94,7 +94,7 @@ pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
         validatorIndex UInt64,
         address String,
         amount UInt256
-    ) ENGINE=MergeTree
+    ) ENGINE=ReplacingMergeTree
     ORDER BY (blockHash, index);
     ";
 

@@ -372,6 +372,7 @@ dependencies = [
  "num_cpus",
  "pretty_env_logger",
  "serde",
+ "serde_bytes",
  "serde_json",
  "tokio",
 ]
@@ -441,7 +442,8 @@ checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
 [[package]]
 name = "clickhouse"
 version = "0.11.4"
-source = "git+https://github.com/magurotuna/clickhouse.rs?branch=async_insert#465b1cf699b0784b20393b4a48a2402232b7a4a4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a89358c958175765bbb206182184f27d7ce7529c14a1add04c07ae8f72c5ef9c"
 dependencies = [
  "bstr",
  "bytes",
@@ -462,7 +464,8 @@ dependencies = [
 [[package]]
 name = "clickhouse-derive"
 version = "0.1.1"
-source = "git+https://github.com/magurotuna/clickhouse.rs?branch=async_insert#465b1cf699b0784b20393b4a48a2402232b7a4a4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18af5425854858c507eec70f7deb4d5d8cec4216fcb086283a78872387281ea5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2819,6 +2822,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2113ab51b87a539ae008b5c6c02dc020ffa39afd2d83cffcb3f4eb2722cebec2"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde_bytes"
+version = "0.11.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "416bda436f9aab92e02c8e10d49a15ddd339cea90b6e340fe51ed97abb548294"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
