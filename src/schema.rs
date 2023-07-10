@@ -1,109 +1,83 @@
-use std::error::Error;
+use klickhouse::{Row, u256, Bytes};
 
-use clickhouse::Client;
+#[derive(Row, Clone, Debug, Default)]
+pub struct BlockRow {
+    pub hash: Bytes,
+    pub number: u64,
+    pub parentHash: Bytes,
+    pub uncles: Vec<Bytes>,
+    pub sha3Uncles: Bytes,
+    pub totalDifficulty: u256,
+    pub difficulty: u256,
+    pub miner: Bytes,
+    pub nonce: Bytes,
+    pub mixHash: Bytes,
+    pub baseFeePerGas: Option<u256>,
+    pub gasLimit: u256,
+    pub gasUsed: u256,
+    pub stateRoot: Bytes,
+    pub transactionsRoot: Bytes,
+    pub receiptsRoot: Bytes,
+    pub logsBloom: Bytes,
+    pub withdrawlsRoot: Option<Bytes>,
+    pub extraData: Bytes,
+    pub timestamp: u256,
+    pub size: u256,
+}
 
-pub async fn create_schema(client: &Client) -> Result<(), Box<dyn Error>>  {
-    debug!("start  initializing schema");
-    let db_ddl = r"
-    CREATE DATABASE IF NOT EXISTS ethereum;
-    ";
 
-    let blocks_ddl = r"
-    CREATE TABLE IF NOT EXISTS ethereum.blocks (
-        hash             FixedString(32),
-        number           UInt64,
-        parentHash       FixedString(32),
-        uncles           Array(String),
-        sha3Uncles       FixedString(32),           
-        totalDifficulty  UInt256,
-        miner            FixedString(32),
-        difficulty       UInt256,
-        nonce            UInt64,
-        mixHash          FixedString(32),
-        baseFeePerGas    Nullable(UInt256),
-        gasLimit         UInt256,
-        gasUsed          UInt256,
-        stateRoot        FixedString(32),
-        transactionsRoot FixedString(32),
-        receiptsRoot     FixedString(32),
-        logsBloom        String,
-        withdrawlsRoot  Nullable(String),
-        extraData        String,
-        timestamp        UInt256,
-        size             UInt256,
-    ) ENGINE=ReplacingMergeTree 
-    ORDER BY (hash, number);
-    ";
+#[derive(Row, Clone, Debug, Default)]
+pub struct TransactionRow {
+    pub hash: Bytes,
+    pub blockHash: Bytes,
+    pub blockNumber: u64,
+    pub blockTimestamp: u256,
+    pub transactionIndex: u64,
+    pub chainId: Option<u256>,
+    pub r#type: Option<u64>,
+    pub from: Bytes,
+    pub to: Option<Bytes>,
+    pub value: u256,
+    pub nonce: u256,
+    pub input: Bytes,
+    pub gas: u256,
+    pub gasPrice: Option<u256>,
+    pub maxFeePerGas: Option<u256>,
+    pub maxPriorityFeePerGas: Option<u256>,
+    pub r: u256,
+    pub s: u256,
+    pub v: u64,
+    pub accessList: Option<String>,
+    pub contractAddress: Option<Bytes>,
+    pub cumulativeGasUsed: u256,
+    pub effectiveGasPrice: Option<u256>,
+    pub gasUsed: u256,
+    pub logsBloom: Bytes,
+    pub root: Option<Bytes>,
+    pub status: Option<u64>,
+}
 
-    let tx_ddl = r"
-    CREATE TABLE IF NOT EXISTS ethereum.transactions (
-        hash             FixedString(32),
-        blockHash        FixedString(32),
-        blockNumber      UInt64,
-        blockTimestamp   UInt256,
-        transactionIndex UInt64,
-        chainId Nullable(UInt256),
-        type    Nullable(UInt64),
-        from             String,
-        to               Nullable(String),
-        value            UInt256,
-        nonce            UInt256,
-        input            String,
-        gas                  UInt256,
-        gasPrice             Nullable(UInt256),
-        maxFeePerGas         Nullable(UInt256),
-        maxPriorityFeePerGas Nullable(UInt256),
-        r UInt256,
-        s UInt256,
-        v UInt64,
-        -- accessList Array(Tuple(String, Array(String))) COMMENT 'item in accessList: {address: tuple.0, storageKeys: turple.1 }',
-        accessList Nullable(String),
-        contractAddress Nullable(String),
-        cumulativeGasUsed UInt256,
-        effectiveGasPrice UInt256,
-        gasUsed           UInt256,
-        logsBloom         String,
-        root              Nullable(FixedString(32)),
-        status            UInt64
-    ) ENGINE=ReplacingMergeTree
-    ORDER BY hash;
-    ";
+#[derive(Row, Clone, Debug, Default)]
+pub struct EventRow {
+    pub blockHash: Bytes,
+    pub blockNumber: u64,
+    pub blockTimestamp: u256,
+    pub transactionHash: Bytes,
+    pub transactionIndex: u64,
+    pub logIndex: u256,
+    pub removed: bool,
+    pub topics: Vec<Bytes>,
+    pub data: Bytes,
+    pub address: Bytes,
+}
 
-    let event_ddl = r"
-    CREATE TABLE IF NOT EXISTS ethereum.events (
-        address FixedString(20),
-        blockHash FixedString(32),
-        blockNumber UInt64,
-        blockTimestamp UInt256,
-        transactionHash FixedString(32),
-        transactionIndex UInt64,
-        logIndex UInt256,
-        removed Boolean,
-        topics Array(FixedString(32)),
-        data String,
-    ) ENGINE=ReplacingMergeTree
-    ORDER BY (transactionHash, logIndex);
-    ";
-
-    let withdraw_ddl = r"
-    CREATE TABLE IF NOT EXISTS ethereum.withdraws (
-        blockHash String,
-        blockNumber UInt64,
-        blockTimestamp UInt256,
-        `index` UInt64,
-        validatorIndex UInt64,
-        address String,
-        amount UInt256
-    ) ENGINE=ReplacingMergeTree
-    ORDER BY (blockHash, index);
-    ";
-
-    client.query(db_ddl).execute().await?;
-    client.query(blocks_ddl).execute().await?;
-    client.query(tx_ddl).execute().await?;
-    client.query(event_ddl).execute().await?;
-    client.query(withdraw_ddl).execute().await?;
-
-    debug!("schema initialized");
-    Ok(())
+#[derive(Row, Clone, Debug, Default)]
+pub struct WithdrawalRow {
+    pub blockHash: Bytes,
+    pub blockNumber: u64,
+    pub blockTimestamp: u256,
+    pub index: u64,
+    pub validatorIndex: u64,
+    pub address: Bytes,
+    pub amount: u256,
 }

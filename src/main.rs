@@ -1,28 +1,16 @@
 use clap::Parser;
-use clickhouse::insert::Insert;
-use clickhouse::inserter::Inserter;
-// use clickhouse::AsyncInsertOptions;
-use clickhouse::Client;
-use clickhouse::Row;
-use ethers::types::transaction::eip2930::AccessList;
-use ethers::types::Bloom;
-use ethers::types::Bytes;
-use ethers::types::H160;
-use ethers::types::H64;
-use ethers::types::U64;
-use ethers::{
-    providers::{Middleware, Provider, Ws},
-    types::{Block, Transaction, H256, U256},
-};
-use serde::{Deserialize, Serialize};
+use ethers::providers::{Middleware, Provider, Ws};
+use klickhouse::{u256, Bytes};
+use klickhouse::{Client, ClientOptions};
+use schema::{BlockRow, EventRow, TransactionRow, WithdrawalRow};
 use std::error::Error;
 
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-mod schema;
 mod helpers;
+mod schema;
 
 /// Simple DDL program to load ethereum data into clickhouse
 #[derive(Parser, Debug)]
@@ -49,319 +37,301 @@ struct Args {
     schema: bool,
 }
 
-#[derive(Row, Serialize, Deserialize)]
-struct BlockRow {
-    #[serde(with = "helpers::h256")]
-    hash: H256,
-    // #[serde(with = "u64")]
-    // number: U64,
-    // #[serde(with = "h256")]
-    // parentHash: H256,
-    // uncles: Vec<H256>,
-    // #[serde(with = "h256")]
-    // sha3Uncles: H256,
-    // #[serde(with = "helpers::u256")]
-    // totalDifficulty: U256,
-    // #[serde(with = "helpers::u256")]
-    // difficulty: U256,
-    // #[serde(with = "h160")]
-    // miner: H160,
-    // #[serde(with = "h64")]
-    // nonce: H64,
-    // mixHash: H256,
-    // #[serde(with = "helpers::u256::option")]
-    // baseFeePerGas: Option<U256>,
-    // #[serde(with = "helpers::u256")]
-    // gasLimit: U256,
-    // #[serde(with = "helpers::u256")]
-    // gasUsed: U256,
-    // stateRoot: H256,
-    // transactionsRoot: H256,
-    // receiptsRoot: H256,
-    // logsBloom: Bloom,
-    // withdrawlsRoot: Option<H256>,
-    // extraData: Bytes,
-    // #[serde(with = "helpers::u256")]
-    // timestamp: U256,
-    // #[serde(with = "helpers::u256")]
-    // size: U256,
-}
-
-#[derive(Row, Serialize, Deserialize)]
-struct TransactionRow {
-    #[serde(with = "helpers::h256")]
-    hash: H256,
-    #[serde(with = "helpers::h256")]
-    blockHash: H256,
-    #[serde(with = "helpers::u64")]
-    blockNumber: U64,
-    #[serde(with = "helpers::u256")]
-    blockTimestamp: U256,
-    #[serde(with = "helpers::u64")]
-    transactionIndex: U64,
-    #[serde(with = "helpers::u256::option")]
-    chainId: Option<U256>,
-    #[serde(with = "helpers::u64::option")]
-    r#type: Option<U64>,
-    #[serde(with = "helpers::h160")]
-    from: H160,
-    #[serde(with = "helpers::h160::option")]
-    to: Option<H160>,
-    #[serde(with = "helpers::u256")]
-    value: U256,
-    #[serde(with = "helpers::u256")]
-    nonce: U256,
-    input: Bytes,
-    #[serde(with = "helpers::u256")]
-    gas: U256,
-    #[serde(with = "helpers::u256::option")]
-    gasPrice: Option<U256>,
-    #[serde(with = "helpers::u256::option")]
-    maxFeePerGas: Option<U256>,
-    #[serde(with = "helpers::u256::option")]
-    maxPriorityFeePerGas: Option<U256>,
-    #[serde(with = "helpers::u256")]
-    r: U256,
-    #[serde(with = "helpers::u256")]
-    s: U256,
-    #[serde(with = "helpers::u64")]
-    v: U64,
-    #[serde(with = "helpers::access_list::option")]
-    accessList: Option<AccessList>,
-    #[serde(with = "helpers::h160::option")]
-    contractAddress: Option<H160>,
-    #[serde(with = "helpers::u256")]
-    cumulativeGasUsed: U256,
-    #[serde(with = "helpers::u256")]
-    effectiveGasPrice: U256,
-    #[serde(with = "helpers::u256")]
-    gasUsed: U256,
-    logsBloom: Bloom,
-    #[serde(with = "helpers::h256::option")]
-    root: Option<H256>,
-    #[serde(with = "helpers::u64")]
-    status: U64,
-}
-
-#[derive(Row, Serialize, Deserialize)]
-struct EventRow {
-    blockHash: H256,
-    #[serde(with = "helpers::u64")]
-    blockNumber: U64,
-    #[serde(with = "helpers::u256")]
-    blockTimestamp: U256,
-    transactionHash: H256,
-    #[serde(with = "helpers::u64")]
-    transactionIndex: U64,
-    #[serde(with = "helpers::u256")]
-    logIndex: U256,
-    removed: bool,
-    topics: Vec<H256>,
-    data: Bytes,
-    address: H160,
-}
-
-#[derive(Row, Serialize, Deserialize)]
-pub struct WithdrawalRow {
-    blockHash: H256,
-    #[serde(with = "helpers::u64")]
-    blockNumber: U64,
-    #[serde(with = "helpers::u256")]
-    blockTimestamp: U256,
-    #[serde(with = "helpers::u64")]
-    index: U64,
-    #[serde(with = "helpers::u64")]
-    validatorIndex: U64,
-    address: H160,
-    #[serde(with = "helpers::u256")]
-    amount: U256,
-}
-
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init_timed();
 
     let args = Args::parse();
 
-    let client = Client::default()
-        .with_url(args.clickhouse);
+    let client = Client::connect("127.0.0.1:9000", ClientOptions::default())
+        .await
+        .unwrap();
 
     let provider = Provider::<Ws>::connect(args.ethereum).await?;
 
     if args.schema {
-        schema::create_schema(&client).await?;
+        debug!("start  initializing schema");
+        client
+            .execute(
+                "
+        CREATE DATABASE IF NOT EXISTS ethereum;
+        ",
+            )
+            .await
+            .unwrap();
+        client
+            .execute(
+                "
+        CREATE TABLE IF NOT EXISTS ethereum.blocks (
+            hash             FixedString(32),
+            number           UInt64,
+            parentHash       FixedString(32),
+            uncles           Array(String),
+            sha3Uncles       FixedString(32),           
+            totalDifficulty  UInt256,
+            miner            FixedString(20),
+            difficulty       UInt256,
+            nonce            FixedString(8),
+            mixHash          FixedString(32),
+            baseFeePerGas    Nullable(UInt256),
+            gasLimit         UInt256,
+            gasUsed          UInt256,
+            stateRoot        FixedString(32),
+            transactionsRoot FixedString(32),
+            receiptsRoot     FixedString(32),
+            logsBloom        String,
+            withdrawlsRoot  Nullable(FixedString(32)),
+            extraData        String,
+            timestamp        UInt256,
+            size             UInt256,
+        ) ENGINE=ReplacingMergeTree 
+        ORDER BY (hash, number);
+        ",
+            )
+            .await
+            .unwrap();
+        client.execute("
+        CREATE TABLE IF NOT EXISTS ethereum.transactions (
+            hash             FixedString(32),
+            blockHash        FixedString(32),
+            blockNumber      UInt64,
+            blockTimestamp   UInt256,
+            transactionIndex UInt64,
+            chainId Nullable(UInt256),
+            type    Nullable(UInt64),
+            from             FixedString(20),
+            to               Nullable(FixedString(20)),
+            value            UInt256,
+            nonce            UInt256,
+            input            String,
+            gas                  UInt256,
+            gasPrice             Nullable(UInt256),
+            maxFeePerGas         Nullable(UInt256),
+            maxPriorityFeePerGas Nullable(UInt256),
+            r UInt256,
+            s UInt256,
+            v UInt64,
+            accessList Nullable(String),
+            contractAddress Nullable(FixedString(20)),
+            cumulativeGasUsed UInt256,
+            effectiveGasPrice Nullable(UInt256),
+            gasUsed           UInt256,
+            logsBloom         String,
+            root              Nullable(FixedString(32)) COMMENT 'Only present before activation of [EIP-658]',
+            status            Nullable(UInt64) COMMENT 'Only present after activation of [EIP-658]'
+        ) ENGINE=ReplacingMergeTree
+        ORDER BY hash;
+        ").await.unwrap();
+        client
+            .execute(
+                "
+        CREATE TABLE IF NOT EXISTS ethereum.events (
+            address FixedString(20),
+            blockHash FixedString(32),
+            blockNumber UInt64,
+            blockTimestamp UInt256,
+            transactionHash FixedString(32),
+            transactionIndex UInt64,
+            logIndex UInt256,
+            removed Boolean,
+            topics Array(FixedString(32)),
+            data String,
+        ) ENGINE=ReplacingMergeTree
+        ORDER BY (transactionHash, logIndex);
+        ",
+            )
+            .await
+            .unwrap();
+        client
+            .execute(
+                "
+        CREATE TABLE IF NOT EXISTS ethereum.withdraws (
+            blockHash String,
+            blockNumber UInt64,
+            blockTimestamp UInt256,
+            `index` UInt64,
+            validatorIndex UInt64,
+            address FixedString(20),
+            amount UInt256
+        ) ENGINE=ReplacingMergeTree
+        ORDER BY (blockHash, index);
+        ",
+            )
+            .await
+            .unwrap();
+        debug!("schema initialized");
     }
 
-    let client = client.with_database("ethereum");
+    let batch: u64 = 1_000;
 
-    let mut insert_block: Inserter<BlockRow> = client.inserter::<BlockRow>(
-        "blocks",
-        // AsyncInsertOptions::builder()
-        //     .async_insert(true)
-        //     .async_insert_deduplicate(true)
-        //     .async_insert_threads(num_cpus::get())
-        //     .build(),
-    )?;
-    let mut insert_tx: Inserter<TransactionRow> = client.inserter(
-        "transactions",
-        // AsyncInsertOptions::builder()
-        //     .async_insert(true)
-        //     .async_insert_deduplicate(true)
-        //     .async_insert_threads(num_cpus::get())
-        //     .build(),
-    )?;
-    let mut insert_event: Inserter<EventRow> = client.inserter(
-        "events",
-        // AsyncInsertOptions::builder()
-        //     .async_insert(true)
-        //     .async_insert_deduplicate(true)
-        //     .async_insert_threads(num_cpus::get())
-        //     .build(),
-    )?;
-    let mut insert_withdraw: Inserter<WithdrawalRow> = client.inserter(
-        "withdraws",
-        // AsyncInsertOptions::builder()
-        //     .async_insert(true)
-        //     .async_insert_deduplicate(true)
-        //     .async_insert_threads(num_cpus::get())
-        //     .build(),
-    )?;
+    let mut block_row_list = Vec::with_capacity((batch + 1_u64) as usize);
+    let mut transaction_row_list = Vec::new();
+    let mut event_row_list = Vec::new();
+    let mut withdraw_row_list = Vec::new();
 
     for i in args.from..=args.to {
-        parse_block(
-            &provider,
-            &mut insert_block,
-            &mut insert_tx,
-            &mut insert_event,
-            &mut insert_withdraw,
-            i,
-        )
-        .await?;
-        if i > 0 && i % 100_000 == 0 {
-            insert_event.commit().await?;
-            insert_tx.commit().await?;
-            let q = insert_block.commit().await?;
-            warn!("{} -> {}: {} done", i-100_000, i,  q.entries);
+        let block = provider.get_block_with_txs(i).await.unwrap().unwrap();
+        let receipts = provider.get_block_receipts(i).await.unwrap();
+
+        let block_row = BlockRow {
+            hash: block.hash.unwrap().0.to_vec().into(), //block.hash.unwrap()),
+            number: block.number.unwrap().as_u64(),
+            parentHash: block.parent_hash.0.to_vec().into(),
+            uncles: block
+                .uncles
+                .iter()
+                .map(|uncle| uncle.0.to_vec().into())
+                .collect(),
+            sha3Uncles: block.uncles_hash.0.to_vec().into(),
+            totalDifficulty: u256(block.total_difficulty.unwrap().into()),
+            difficulty: u256(block.difficulty.into()),
+            miner: block.author.unwrap().0.to_vec().into(),
+            nonce: block.nonce.unwrap().0.to_vec().into(),
+            mixHash: block.mix_hash.unwrap().0.to_vec().into(),
+            baseFeePerGas: block
+                .base_fee_per_gas
+                .and_then(|fee| Some(u256(fee.into()))),
+            gasLimit: u256(block.gas_limit.into()),
+            gasUsed: u256(block.gas_used.into()),
+            stateRoot: block.state_root.0.to_vec().into(),
+            transactionsRoot: block.transactions_root.0.to_vec().into(),
+            receiptsRoot: block.receipts_root.0.to_vec().into(),
+            logsBloom: block.logs_bloom.unwrap().0.to_vec().into(),
+            withdrawlsRoot: block
+                .withdrawals_root
+                .and_then(|root| Some(root.0.to_vec().into())),
+            extraData: block.extra_data.to_vec().into(),
+            timestamp: u256(block.timestamp.into()),
+            size: u256(block.size.unwrap().into()),
+        };
+        block_row_list.push(block_row);
+
+        for (transaction_index, transaction) in block.transactions.iter().enumerate() {
+            let receipt = &receipts[transaction_index];
+
+            let transaction_row = TransactionRow {
+                hash: transaction.hash.0.to_vec().into(),
+                blockHash: transaction.block_hash.unwrap().0.to_vec().into(),
+                blockNumber: transaction.block_number.unwrap().as_u64(),
+                blockTimestamp: u256(block.timestamp.into()),
+                transactionIndex: transaction.transaction_index.unwrap().as_u64(),
+                chainId: transaction.chain_id.and_then(|id| Some(u256(id.into()))),
+                r#type: transaction.transaction_type.and_then(|t| Some(t.as_u64())),
+                from: transaction.from.0.to_vec().into(),
+                to: transaction.to.and_then(|to| Some(to.0.to_vec().into())),
+                value: u256(transaction.value.into()),
+                nonce: u256(transaction.nonce.into()),
+                input: transaction.input.to_vec().into(),
+                gas: u256(transaction.gas.into()),
+                gasPrice: transaction
+                    .gas_price
+                    .and_then(|price| Some(u256(price.into()))),
+                maxFeePerGas: transaction
+                    .max_fee_per_gas
+                    .and_then(|fee| Some(u256(fee.into()))),
+                maxPriorityFeePerGas: transaction
+                    .max_priority_fee_per_gas
+                    .and_then(|fee| Some(u256(fee.into()))),
+                r: u256(transaction.r.into()),
+                s: u256(transaction.s.into()),
+                v: transaction.v.as_u64(),
+                accessList: transaction
+                    .access_list
+                    .as_ref()
+                    .and_then(|al| Some(serde_json::to_string(&al.clone().to_owned()).unwrap())),
+                contractAddress: receipt
+                    .contract_address
+                    .and_then(|contract| Some(contract.0.to_vec().into())),
+                cumulativeGasUsed: u256(receipt.cumulative_gas_used.into()),
+                effectiveGasPrice: receipt
+                    .effective_gas_price
+                    .and_then(|price| Some(u256(price.into()))),
+                gasUsed: u256(receipt.gas_used.unwrap().into()),
+                logsBloom: receipt.logs_bloom.0.to_vec().into(),
+                root: receipt.root.and_then(|root| Some(root.0.to_vec().into())), // Only present before activation of [EIP-658]
+                status: receipt.status.and_then(|status| Some(status.as_u64())), // Only present after activation of [EIP-658]
+            };
+            transaction_row_list.push(transaction_row);
+
+            for log in &receipt.logs {
+                let mut event_row = EventRow {
+                    blockHash: log.block_hash.unwrap().0.to_vec().into(),
+                    blockNumber: log.block_number.unwrap().as_u64(),
+                    blockTimestamp: u256(block.timestamp.into()),
+                    transactionHash: transaction.hash.0.to_vec().into(),
+                    transactionIndex: transaction.transaction_index.unwrap().as_u64(),
+                    logIndex: u256(log.log_index.unwrap().into()),
+                    removed: log.removed.unwrap(),
+                    topics: log
+                        .topics
+                        .iter()
+                        .map(|topic| topic.0.to_vec().into())
+                        .collect(),
+                    data: log.data.to_vec().into(),
+                    address: log.address.0.to_vec().into(),
+                };
+                event_row_list.push(event_row);
+            }
+        }
+
+        if let Some(withdraws) = block.withdrawals {
+            for withdraw in withdraws {
+                let withdraw_row = WithdrawalRow {
+                    blockHash: block.hash.unwrap().0.to_vec().into(),
+                    blockNumber: block.number.unwrap().as_u64(),
+                    blockTimestamp: u256(block.timestamp.into()),
+                    index: withdraw.index.as_u64(),
+                    validatorIndex: withdraw.validator_index.as_u64(),
+                    address: withdraw.address.0.to_vec().into(),
+                    amount: u256(withdraw.amount.into()),
+                };
+                withdraw_row_list.push(withdraw_row);
+            }
+        }
+
+        if i % batch == 0 {
+            tokio::try_join!(
+                client.insert_native_block(
+                    "INSERT INTO ethereum.blocks FORMAT native",
+                    block_row_list.to_vec()
+                ),
+                client.insert_native_block(
+                    "INSERT INTO ethereum.transactions FORMAT native",
+                    transaction_row_list.to_vec()
+                ),
+                client.insert_native_block(
+                    "INSERT INTO ethereum.events FORMAT native",
+                    event_row_list.to_vec()
+                ),
+                client.insert_native_block(
+                    "INSERT INTO ethereum.withdraws FORMAT native",
+                    withdraw_row_list.to_vec()
+                )
+            )
+            .unwrap();
+
+            block_row_list.clear();
+            transaction_row_list.clear();
+            event_row_list.clear();
+            withdraw_row_list.clear();
+
+            info!("{} done", i)
         }
     }
 
-    insert_event.end().await?;
-    insert_tx.end().await?;
-    insert_block.end().await?;
-    insert_withdraw.end().await?;
-
-    Ok(())
-}
-
-async fn parse_block(
-    provider: &Provider<Ws>,
-    insert_block: &mut Inserter<BlockRow>,
-    insert_tx: &mut Inserter<TransactionRow>,
-    insert_event: &mut Inserter<EventRow>,
-    insert_withdraw: &mut Inserter<WithdrawalRow>,
-    block_number: u64,
-) -> Result<(), Box<dyn Error>> {
-    let block = provider
-        .get_block_with_txs(block_number)
-        .await
-        .unwrap()
-        .unwrap();
-
-    insert_block
-        .write(&BlockRow {
-            hash: block.hash.unwrap(),
-            // number: block.number.unwrap(),
-            // parentHash: block.parent_hash,
-            // uncles: block.uncles,
-            // sha3Uncles: block.uncles_hash,
-            // totalDifficulty: block.total_difficulty.unwrap(),
-            // miner: block.author.unwrap(),
-            // difficulty: block.difficulty,
-            // nonce: block.nonce.unwrap(),
-            // mixHash: block.mix_hash.unwrap(),
-            // baseFeePerGas: block.base_fee_per_gas,
-            // gasLimit: block.gas_limit,
-            // gasUsed: block.gas_used,
-            // stateRoot: block.state_root,
-            // transactionsRoot: block.transactions_root,
-            // receiptsRoot: block.receipts_root,
-            // logsBloom: block.logs_bloom.unwrap(),
-            // withdrawlsRoot: block.withdrawals_root,
-            // extraData: block.extra_data,
-            // timestamp: block.timestamp,
-            // size: block.size.unwrap(),
-        })
-        .await?;
-
-    // let receipts = provider.get_block_receipts(block_number).await?;
-
-    // for (i, tx) in block.transactions.iter().enumerate() {
-    //     let receipt = &receipts[i];
-
-    //     insert_tx
-    //         .write(&TransactionRow {
-    //             hash: tx.hash,
-    //             blockHash: tx.block_hash.unwrap(),
-    //             blockNumber: tx.block_number.unwrap(),
-    //             blockTimestamp: block.timestamp,
-    //             transactionIndex: tx.transaction_index.unwrap(),
-    //             chainId: tx.chain_id,
-    //             r#type: tx.transaction_type,
-    //             from: tx.from,
-    //             to: tx.to,
-    //             value: tx.value,
-    //             nonce: tx.nonce,
-    //             input: tx.input.clone(),
-    //             gas: tx.gas,
-    //             gasPrice: tx.gas_price,
-    //             maxFeePerGas: tx.max_fee_per_gas,
-    //             maxPriorityFeePerGas: tx.max_priority_fee_per_gas,
-    //             r: tx.r,
-    //             s: tx.s,
-    //             v: tx.v,
-    //             accessList: tx.access_list.clone(),
-    //             contractAddress: receipt.contract_address,
-    //             cumulativeGasUsed: receipt.cumulative_gas_used,
-    //             effectiveGasPrice: receipt.effective_gas_price.unwrap(),
-    //             gasUsed: receipt.gas_used.unwrap(),
-    //             logsBloom: receipt.logs_bloom,
-    //             root: receipt.root,
-    //             status: receipt.status.unwrap(),
-    //         })
-    //         .await?;
-    //     for log in &receipt.logs {
-    //         insert_event
-    //             .write(&EventRow {
-    //                 blockHash: log.block_hash.unwrap(),
-    //                 blockNumber: log.block_number.unwrap(),
-    //                 blockTimestamp: block.timestamp,
-    //                 transactionHash: log.transaction_hash.unwrap(),
-    //                 transactionIndex: log.transaction_index.unwrap(),
-    //                 logIndex: log.log_index.unwrap(),
-    //                 removed: log.removed.unwrap(),
-    //                 topics: log.topics.clone(),
-    //                 data: log.data.clone(),
-    //                 address: log.address,
-    //             })
-    //             .await?;
-    //     }
-    // }
-
-    // if let Some(withdraws) = block.withdrawals {
-    //     for w in withdraws {
-    //         insert_withdraw
-    //             .write(&WithdrawalRow {
-    //                 blockHash: block.hash.unwrap(),
-    //                 blockNumber: block.number.unwrap(),
-    //                 blockTimestamp: block.timestamp,
-    //                 index: w.index,
-    //                 validatorIndex: w.validator_index,
-    //                 address: w.address,
-    //                 amount: w.amount,
-    //             })
-    //             .await?;
-    //     }
-    // }
+    tokio::try_join!(
+        client.insert_native_block("INSERT INTO ethereum.blocks FORMAT native", block_row_list),
+        client.insert_native_block(
+            "INSERT INTO ethereum.transactions FORMAT native",
+            transaction_row_list
+        ),
+        client.insert_native_block("INSERT INTO ethereum.events FORMAT native", event_row_list),
+        client.insert_native_block(
+            "INSERT INTO ethereum.withdraws FORMAT native",
+            withdraw_row_list
+        )
+    )
+    .unwrap();
 
     Ok(())
 }
