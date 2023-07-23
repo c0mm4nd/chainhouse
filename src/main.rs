@@ -12,7 +12,7 @@ extern crate log;
 mod helpers;
 mod schema;
 
-/// Simple DDL program to load ethereum data into clickhouse
+/// Simple ETL program to load ethereum data into clickhouse
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {

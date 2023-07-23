@@ -1,5 +1,7 @@
 # chainhouse
-Simple DDL program to load ethereum data into clickhouse
+Simple ETL program to load ethereum data into clickhouse
+
+This repo will be no longer updated, the further updates will be applied to https://github.com/njublockchain/kylinkit
 
 ## Ready
 
@@ -16,7 +18,7 @@ cargo build --release
 ## Usage
 
 ```bash
-Simple DDL program to load ethereum data into clickhouse
+Simple ETL program to load ethereum data into clickhouse
 
 Usage: chainhouse [OPTIONS] --from <FROM> --to <TO>
 
